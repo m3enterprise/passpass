@@ -1,0 +1,48 @@
+services:
+  # Backend FastAPI Service
+  - type: web
+    name: presenton-backend
+    env: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: CAN_CHANGE_KEYS
+        value: true
+      - key: APP_DATA_DIRECTORY
+        value: /app/app_data
+      - key: TEMP_DIRECTORY
+        value: /tmp/presenton
+      - key: USER_CONFIG_PATH
+        value: /app/app_data/userConfig.json
+      - key: DATABASE_URL
+        fromDatabase:
+          name: presenton-db
+          property: connectionString
+    disks:
+      - name: app-data
+        mountPath: /app/app_data
+        sizeGB: 1
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # Frontend Next.js Service (will be served by the same container via nginx)
+  - type: web
+    name: presenton-frontend
+    env: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BACKEND_URL
+        fromService:
+          name: presenton-backend
+          type: web
+          property: url
+    healthCheckPath: /
+    autoDeploy: true
+
+databases:
+  - name: presenton-db 
