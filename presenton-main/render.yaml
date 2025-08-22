@@ -1,0 +1,61 @@
+services:
+  # Backend FastAPI Service
+  - type: web
+    name: presenton-backend
+    env: python
+    plan: starter
+    buildCommand: |
+      cd servers/fastapi
+      pip install -r requirements.txt
+    startCommand: |
+      cd servers/fastapi
+      python server.py --port $PORT --reload false
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.18
+      - key: CAN_CHANGE_KEYS
+        value: true
+      - key: APP_DATA_DIRECTORY
+        value: /opt/render/project/src/app_data
+      - key: TEMP_DIRECTORY
+        value: /tmp/presenton
+      - key: USER_CONFIG_PATH
+        value: /opt/render/project/src/app_data/userConfig.json
+      - key: DATABASE_URL
+        fromDatabase:
+          name: presenton-db
+          property: connectionString
+    disks:
+      - name: app-data
+        mountPath: /opt/render/project/src/app_data
+        sizeGB: 1
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # Frontend Next.js Service
+  - type: web
+    name: presenton-frontend
+    env: node
+    plan: starter
+    buildCommand: |
+      cd servers/nextjs
+      npm ci
+      npm run build
+    startCommand: |
+      cd servers/nextjs
+      npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: NODE_ENV
+        value: production
+      - key: BACKEND_URL
+        fromService:
+          name: presenton-backend
+          type: web
+          property: url
+    healthCheckPath: /
+    autoDeploy: true
+
+databases:
+  - name: presenton-db 

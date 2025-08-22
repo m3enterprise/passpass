@@ -1,0 +1,40 @@
+name: presenton
+services:
+  - name: presenton-backend
+    source_dir: /servers/fastapi
+    github:
+      repo: your-username/presenton
+      branch: main
+    run_command: python server.py --port $PORT --reload false
+    environment_slug: python
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: CAN_CHANGE_KEYS
+        value: "true"
+      - key: APP_DATA_DIRECTORY
+        value: "/app/app_data"
+      - key: TEMP_DIRECTORY
+        value: "/tmp/presenton"
+      - key: USER_CONFIG_PATH
+        value: "/app/app_data/userConfig.json"
+      - key: DATABASE_URL
+        value: "sqlite:///app_data/presenton.db"
+
+  - name: presenton-frontend
+    source_dir: /servers/nextjs
+    github:
+      repo: your-username/presenton
+      branch: main
+    run_command: npm start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: NODE_ENV
+        value: "production"
+      - key: BACKEND_URL
+        value: "https://presenton-backend-xxxxx.ondigitalocean.app"
+    routes:
+      - path: /
+    http_port: 3000 

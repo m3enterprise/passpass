@@ -1,0 +1,59 @@
+steps:
+  # Build the backend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.cloud', '-t', 'gcr.io/$PROJECT_ID/presenton-backend:$COMMIT_SHA', '.']
+    dir: 'servers/fastapi'
+
+  # Build the frontend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.cloud', '-t', 'gcr.io/$PROJECT_ID/presenton-frontend:$COMMIT_SHA', '.']
+    dir: 'servers/nextjs'
+
+  # Push backend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/presenton-backend:$COMMIT_SHA']
+
+  # Push frontend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/presenton-frontend:$COMMIT_SHA']
+
+  # Deploy backend to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'presenton-backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/presenton-backend:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'CAN_CHANGE_KEYS=true,APP_DATA_DIRECTORY=/app/app_data,TEMP_DIRECTORY=/tmp/presenton,USER_CONFIG_PATH=/app/app_data/userConfig.json,DATABASE_URL=sqlite:///app_data/presenton.db'
+
+  # Deploy frontend to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'presenton-frontend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/presenton-frontend:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'NODE_ENV=production,BACKEND_URL=https://presenton-backend-xxxxx-uc.a.run.app'
+
+images:
+  - 'gcr.io/$PROJECT_ID/presenton-backend:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/presenton-frontend:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY 

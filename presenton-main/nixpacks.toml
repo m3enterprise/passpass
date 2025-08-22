@@ -1,0 +1,17 @@
+[phases.setup]
+nixPkgs = ["python311", "python311Packages.pip"]
+
+[phases.install]
+cmds = [
+  "cd servers/fastapi",
+  "pip install -r requirements.txt"
+]
+
+[phases.build]
+cmds = [
+  "cd servers/fastapi",
+  "python -c 'import api.main'"
+]
+
+[start]
+cmd = "cd servers/fastapi && python server.py --port $PORT --reload false" 
