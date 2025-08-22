@@ -2,44 +2,38 @@ services:
   # Backend FastAPI Service
   - type: web
     name: presenton-backend
-    env: python
+    env: docker
     plan: starter
-    sourceDir: servers/fastapi
-    buildCommand: pip install -r requirements.txt
-    startCommand: python server.py --port $PORT --reload false
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.18
       - key: CAN_CHANGE_KEYS
         value: true
       - key: APP_DATA_DIRECTORY
-        value: /opt/render/project/src/app_data
+        value: /app/app_data
       - key: TEMP_DIRECTORY
         value: /tmp/presenton
       - key: USER_CONFIG_PATH
-        value: /opt/render/project/src/app_data/userConfig.json
+        value: /app/app_data/userConfig.json
       - key: DATABASE_URL
         fromDatabase:
           name: presenton-db
           property: connectionString
     disks:
       - name: app-data
-        mountPath: /opt/render/project/src/app_data
+        mountPath: /app/app_data
         sizeGB: 1
     healthCheckPath: /health
     autoDeploy: true
 
-  # Frontend Next.js Service
+  # Frontend Next.js Service (will be served by the same container via nginx)
   - type: web
     name: presenton-frontend
-    env: node
+    env: docker
     plan: starter
-    sourceDir: servers/nextjs
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     envVars:
-      - key: NODE_VERSION
-        value: 18
       - key: NODE_ENV
         value: production
       - key: BACKEND_URL

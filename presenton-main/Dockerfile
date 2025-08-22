@@ -1,65 +1,96 @@
+# Multi-stage build for Render deployment
+FROM python:3.11-slim-bookworm as backend-builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    fontconfig \
+    imagemagick \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure ImageMagick for PDF processing
+RUN sed -i 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/' /etc/ImageMagick-6/policy.xml
+
+# Set working directory
+WORKDIR /app
+
+# Copy and install Python dependencies
+COPY servers/fastapi/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend code
+COPY servers/fastapi/ ./servers/fastapi/
+
+# Frontend build stage
+FROM node:18-alpine as frontend-builder
+
+WORKDIR /app
+
+# Copy package files
+COPY servers/nextjs/package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy frontend source
+COPY servers/nextjs/ ./
+
+# Build the application
+RUN npm run build
+
+# Production stage
 FROM python:3.11-slim-bookworm
 
-# Install Node.js and npm
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     nginx \
     curl \
     libreoffice \
     fontconfig \
-    imagemagick
+    imagemagick \
+    && rm -rf /var/lib/apt/lists/*
 
+# Configure ImageMagick
 RUN sed -i 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/' /etc/ImageMagick-6/policy.xml
 
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs
 
-# Install Node.js 20 using NodeSource repository
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs
-
-
-# Create a working directory
-WORKDIR /app  
-
-# Set environment variables
-ENV APP_DATA_DIRECTORY=/app_data
-ENV TEMP_DIRECTORY=/tmp/presenton
-# ENV PYTHONPATH="${PYTHONPATH}:/app/servers/fastapi"
-
-
-# Install ollama
-RUN curl -fsSL https://ollama.com/install.sh | sh
-
-# Install dependencies for FastAPI
-RUN pip install aiohttp aiomysql aiosqlite asyncpg fastapi[standard] \
-    pathvalidate pdfplumber chromadb sqlmodel \
-    anthropic google-genai openai fastmcp
-RUN pip install docling --extra-index-url https://download.pytorch.org/whl/cpu
-
-# Install dependencies for Next.js
-WORKDIR /app/servers/nextjs
-COPY servers/nextjs/package.json servers/nextjs/package-lock.json ./
-RUN npm install
-
-# Install chrome for puppeteer
-RUN npx puppeteer browsers install chrome@136.0.7103.92 --install-deps
-
-# Copy Next.js app
-COPY servers/nextjs/ /app/servers/nextjs/
-
-# Build the Next.js app
-WORKDIR /app/servers/nextjs
-RUN npm run build
-
+# Set working directory
 WORKDIR /app
 
-# Copy FastAPI
-COPY servers/fastapi/ ./servers/fastapi/
-COPY start.js LICENSE NOTICE ./
+# Copy Python dependencies from builder
+COPY --from=backend-builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=backend-builder /usr/local/bin /usr/local/bin
 
-# Copy nginx configuration
+# Copy backend code
+COPY --from=backend-builder /app/servers/fastapi ./servers/fastapi
+
+# Copy frontend build
+COPY --from=frontend-builder /app/.next-build ./servers/nextjs/.next-build
+COPY --from=frontend-builder /app/node_modules ./servers/nextjs/node_modules
+COPY --from=frontend-builder /app/package*.json ./servers/nextjs/
+
+# Copy configuration files
+COPY start.js LICENSE NOTICE ./
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Expose the port
+# Create data directories
+RUN mkdir -p /app/app_data /tmp/presenton
+
+# Set environment variables
+ENV APP_DATA_DIRECTORY=/app/app_data
+ENV TEMP_DIRECTORY=/tmp/presenton
+ENV PYTHONPATH=/app/servers/fastapi
+ENV NODE_ENV=production
+
+# Expose port
 EXPOSE 80
 
-# Start the servers
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Start the application
 CMD ["node", "/app/start.js"]
